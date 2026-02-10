@@ -100,11 +100,18 @@ export async function POST(request: NextRequest) {
 
     const events = calendarResponse.data.items || [];
 
-    // Delete all events
+    // Filter to delete only university schedule events
+    // We identify them by checking if description contains university markers
+    const universityEvents = events.filter(event => {
+      const description = event.description || '';
+      // Check if event was created by our app (has specific markers)
+      return description.includes('Тип:') && description.includes('День:');
+    });
+
     let deleted = 0;
     let errors = 0;
 
-    for (const event of events) {
+    for (const event of universityEvents) {
       try {
         await calendar.events.delete({
           calendarId: 'primary',
@@ -117,7 +124,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ deleted, errors, total: events.length });
+    return NextResponse.json({ 
+      deleted, 
+      errors, 
+      total: events.length,
+      universityEvents: universityEvents.length 
+    });
   } catch (error) {
     console.error('Error deleting events:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
