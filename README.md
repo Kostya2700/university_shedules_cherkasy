@@ -1,36 +1,155 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎓 Schedule Calendar
 
-## Getting Started
+**Автоматичне управління розкладом університету в Google Calendar**
 
-First, run the development server:
+[![Next.js](https://img.shields.io/badge/Next.js-15.1.3-black)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)](https://www.typescriptlang.org/)
+[![Status](https://img.shields.io/badge/Status-Production%20Ready-success)](https://github.com/)
+
+## ✨ Особливості
+
+- 🔐 **Безпечна авторизація** через Google OAuth 2.0
+- 📊 **Розумні фільтри** - рівень освіти та курс
+- 📅 **Автоматичне управління** - додавання, видалення, оновлення подій
+- 🔗 **Meeting Links** - автоматичне додавання посилань на Zoom/Meet
+- 🎨 **Кольорове кодування** - лекція/практика/лабораторна
+- ⏰ **Нагадування** - за 10 хвилин до початку
+- 📱 **Responsive** - працює на всіх пристроях
+
+## 🚀 Швидкий старт
 
 ```bash
+# Клонування
+git clone <repository-url>
+cd schedule-calendar
+
+# Встановлення
+npm install
+
+# Налаштування (створіть .env.local)
+cp .env.example .env.local
+# Заповніть змінні оточення
+
+# Запуск
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Відкрийте [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 📚 Документація
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Документ | Опис |
+|----------|------|
+| [📖 QUICK_START.md](./QUICK_START.md) | Швидкий старт для розробки |
+| [⚡ QUICK_DEPLOY.md](./QUICK_DEPLOY.md) | Deploy на Vercel за 5 хвилин |
+| [🔧 SETUP.md](./SETUP.md) | Детальне налаштування |
+| [🔑 SETUP_GOOGLE_AUTH.md](./SETUP_GOOGLE_AUTH.md) | Google OAuth конфігурація |
+| [✅ DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md) | Checklist перед deploy |
+| [📋 PROJECT_SUMMARY.md](./PROJECT_SUMMARY.md) | Повний огляд проекту |
+| [🚀 README_PRODUCTION.md](./README_PRODUCTION.md) | Production документація |
 
-## Learn More
+## 🏗️ Технології
 
-To learn more about Next.js, take a look at the following resources:
+- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
+- **Backend**: Next.js API Routes, Google APIs
+- **Auth**: OAuth 2.0 (Google)
+- **APIs**: Google Calendar, Google Sheets
+- **Deploy**: Vercel
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 📁 Структура
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+schedule-calendar/
+├── src/
+│   ├── app/
+│   │   ├── page.tsx              # Main UI
+│   │   └── api/                  # API routes
+│   ├── lib/                      # Business logic
+│   └── types/                    # TypeScript types
+├── public/                       # Static files
+└── Documentation/                # Docs
+```
 
-## Deploy on Vercel
+## 🔧 Налаштування
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 1. Google Cloud Console
+1. Створіть новий проект
+2. Увімкніть Google Calendar API
+3. Увімкніть Google Sheets API
+4. Створіть OAuth 2.0 Client ID
+5. Додайте redirect URI: `http://localhost:3000/api/auth/google`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 2. Environment Variables
+```env
+GOOGLE_CLIENT_ID=your_client_id
+GOOGLE_CLIENT_SECRET=your_client_secret
+GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google
+SPREADSHEET_ID=your_spreadsheet_id
+NEXTAUTH_SECRET=your_random_secret
+```
+
+### 3. Google Sheets
+Структура таблиці:
+- Рядок 1-3: Заголовки
+- Колонка A: Дати
+- Колонка B: Час
+- Колонки C+: Розклад груп
+
+## 🚀 Deploy на Vercel
+
+```bash
+# 1. Push to GitHub
+git push origin main
+
+# 2. Підключіть репозиторій на vercel.com
+# 3. Додайте Environment Variables
+# 4. Deploy!
+```
+
+Детальна інструкція: [QUICK_DEPLOY.md](./QUICK_DEPLOY.md)
+
+## 📸 Screenshots
+
+![Main Interface](docs/screenshot-main.png)
+*Головний інтерфейс з фільтрами та управлінням подіями*
+
+## 🤝 Contributing
+
+Pull requests вітаються! Для великих змін спочатку відкрийте issue.
+
+## 📄 Ліцензія
+
+MIT
+
+## 👥 Автори
+
+Розроблено для автоматизації управління розкладом університету
+
+## 💡 Використання
+
+### Додавання подій
+1. Увійдіть через Google
+2. Оберіть рівень освіти та курс
+3. Виберіть аркуш з датою
+4. Виберіть групу
+5. Натисніть "Додати нові"
+
+### Оновлення розкладу
+Натисніть "Оновити" - автоматично видалить старі події та додасть нові
+
+### Видалення подій
+Натисніть "Видалити старі" - видалить всі події для обраної групи
+
+## 🐛 Troubleshooting
+
+Дивіться [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md) → Troubleshooting
+
+## 📞 Підтримка
+
+- 📖 Документація: Дивіться файли вище
+- 🐛 Bug reports: Створіть issue
+- 💬 Питання: Discussions
+
+---
+
+**Статус**: ✅ Production Ready | **Версія**: 1.0.0 | **Оновлено**: Січень 2025
