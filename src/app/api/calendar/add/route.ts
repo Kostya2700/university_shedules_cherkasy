@@ -142,6 +142,17 @@ export async function POST(request: NextRequest) {
           description += `\n\n🔗 Посилання на заняття:\n${event.meetingLink}`;
         }
 
+        // Format datetime for Kyiv timezone without converting to UTC
+        const formatKyivDateTime = (date: Date) => {
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          const hours = String(date.getHours()).padStart(2, '0');
+          const minutes = String(date.getMinutes()).padStart(2, '0');
+          const seconds = String(date.getSeconds()).padStart(2, '0');
+          return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+        };
+
         const response = await calendar.events.insert({
           calendarId: 'primary',
           requestBody: {
@@ -149,11 +160,11 @@ export async function POST(request: NextRequest) {
             location: event.location,
             description: description,
             start: {
-              dateTime: event.startDateTime.toISOString(),
+              dateTime: formatKyivDateTime(event.startDateTime),
               timeZone: 'Europe/Kiev',
             },
             end: {
-              dateTime: event.endDateTime.toISOString(),
+              dateTime: formatKyivDateTime(event.endDateTime),
               timeZone: 'Europe/Kiev',
             },
             colorId: colorId,

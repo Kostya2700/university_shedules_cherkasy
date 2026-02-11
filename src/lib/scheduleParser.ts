@@ -83,9 +83,15 @@ export function parseSchedule(
     // Skip if month not found
     if (monthNum === undefined) continue;
 
-    // Create start and end datetime
-    const startDateTime = new Date(parseInt(year), monthNum, parseInt(day), parseInt(startHour), parseInt(startMin));
-    const endDateTime = new Date(parseInt(year), monthNum, parseInt(day), parseInt(endHour), parseInt(endMin));
+    // Create start and end datetime in Kyiv timezone (UTC+2)
+    // We create date string in ISO format and explicitly set timezone
+    const dateStr = `${year}-${String(monthNum + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const startTimeStr = `${String(startHour).padStart(2, '0')}:${String(startMin).padStart(2, '0')}:00`;
+    const endTimeStr = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}:00`;
+    
+    // Parse as local time (Kyiv timezone on server)
+    const startDateTime = new Date(`${dateStr}T${startTimeStr}`);
+    const endDateTime = new Date(`${dateStr}T${endTimeStr}`);
 
     // Extract teacher name and get meeting link
     const teacherName = extractTeacherName(subject);
