@@ -17,47 +17,114 @@ async function fetchTeacherLinks() {
   }
 }
 
+// Normalize teacher name for matching
+function normalizeTeacherName(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/['"«»]/g, '')
+    .replace(/проф\.|доц\.|викл\.|ст\.викл\.|к\.т\.н\.,?\s*/gi, '');
+}
+
 // Fetch links from Google Classroom/Meet spreadsheet
-async function fetchClassroomLinks(oauth2Client: any) {
+async function fetchClassroomLinks(oauth2Client: typeof google.auth.OAuth2.prototype) {
   try {
     const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
     const classroomSpreadsheetId = '1rJLdJ2fF0WETg7jOs_BBitC-cZIS2n0iEv-ZpbPkc5Y';
     
     console.log('📥 Fetching classroom/meet/zoom links from Google Sheets...');
+    console.log(`   Spreadsheet ID: ${classroomSpreadsheetId}`);
     
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: classroomSpreadsheetId,
-      range: 'A2:Z1000', // Read all data starting from row 2 (skip header)
+      range: 'A1:Z1000', // Read all data including header
     });
 
     const rows = response.data.values || [];
+    console.log(`  📊 Read ${rows.length} rows from classroom spreadsheet`);
+    
+    if (rows.length === 0) {
+      console.warn('  ⚠️  No data in classroom spreadsheet!');
+      return {};
+    }
+
+    // Log header row to understand column structure
+    const headerRow = rows[0];
+    console.log('  📋 Header row:', headerRow);
+    console.log('  📋 Columns:', headerRow.map((col: string, i: number) => `${i}: ${col}`).join(', '));
+    
     const linksMap: Record<string, { meet?: string; zoom?: string; classroom?: string }> = {};
 
-    // Parse rows and build links map by teacher/subject
-    for (const row of rows) {
-      if (row.length < 2) continue;
+    // Parse rows and build links map by teacher/subject (starting from row 2)
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.length < 2) {
+        continue;
+      }
       
       const key = row[0]?.trim(); // Teacher name or subject
-      if (!key) continue;
+      if (!key) {
+        continue;
+      }
 
-      // Extract links from columns (adjust indices based on actual table structure)
+      // Log raw row for debugging
+      console.log(`  📝 Row ${i + 1}: [${row.join(', ')}]`);
+
+      // Extract links from columns
+      // We need to find which columns contain meet/zoom/classroom links
       const links: { meet?: string; zoom?: string; classroom?: string } = {};
       
-      if (row[1]?.trim()) links.meet = row[1].trim();
-      if (row[2]?.trim()) links.zoom = row[2].trim();
-      if (row[3]?.trim()) links.classroom = row[3].trim();
+      // Try to detect links by URL patterns
+      for (let j = 1; j < row.length; j++) {
+        const cell = row[j]?.trim();
+        if (!cell) continue;
+        
+        const cellLower = cell.toLowerCase();
+        
+        // Detect Meet links
+        if (cellLower.includes('meet.google.com') && !links.meet) {
+          links.meet = cell;
+          console.log(`     ✅ Meet found in column ${j}: ${cell}`);
+        }
+        // Detect Zoom links
+        else if (cellLower.includes('zoom.us') && !links.zoom) {
+          links.zoom = cell;
+          console.log(`     ✅ Zoom found in column ${j}: ${cell}`);
+        }
+        // Detect Classroom links
+        else if (cellLower.includes('classroom.google.com') && !links.classroom) {
+          links.classroom = cell;
+          console.log(`     ✅ Classroom found in column ${j}: ${cell}`);
+        }
+      }
 
       // Only add if at least one link exists
       if (links.meet || links.zoom || links.classroom) {
+        // Store with both original and normalized key
         linksMap[key] = links;
-        console.log(`  📌 ${key}: Meet=${!!links.meet}, Zoom=${!!links.zoom}, Classroom=${!!links.classroom}`);
+        const normalizedKey = normalizeTeacherName(key);
+        if (normalizedKey !== key) {
+          linksMap[normalizedKey] = links;
+        }
+        
+        console.log(`  ✅ Row ${i + 1} - "${key}":`);
+        console.log(`     Normalized: "${normalizedKey}"`);
+        console.log(`     Meet: ${links.meet || 'немає'}`);
+        console.log(`     Zoom: ${links.zoom || 'немає'}`);
+        console.log(`     Classroom: ${links.classroom || 'немає'}`);
       }
     }
 
     console.log(`✅ Loaded classroom links for ${Object.keys(linksMap).length} entries`);
+    console.log(`📝 Keys in linksMap:`, Object.keys(linksMap));
     return linksMap;
   } catch (error) {
-    console.warn('❌ Error fetching classroom links:', error);
+    console.error('❌ Error fetching classroom links:', error);
+    if (error instanceof Error) {
+      console.error('   Error details:', error.message);
+      console.error('   Stack:', error.stack);
+    }
     return {};
   }
 }
@@ -113,29 +180,56 @@ export async function POST(request: NextRequest) {
     console.log(`Group cell: ${groupCell}`);
 
     // Fetch teacher links from external API
-    console.log('📥 Fetching teacher links...');
+    console.log('📥 Fetching teacher links from external API...');
     const teacherLinks = await fetchTeacherLinks();
     if (teacherLinks) {
-      console.log(`✅ Loaded links for ${Object.keys(teacherLinks).length} teachers`);
+      console.log(`✅ Loaded links for ${Object.keys(teacherLinks).length} teachers from API`);
+      console.log(`📝 API teacher keys:`, Object.keys(teacherLinks).join(', '));
     } else {
-      console.log('⚠️  No teacher links available');
+      console.log('⚠️  No teacher links available from API');
     }
 
     // Fetch classroom/meet links from Google Sheets
+    console.log('📥 Fetching classroom/meet links from Google Sheets...');
     const classroomLinks = await fetchClassroomLinks(oauth2Client);
+    console.log(`✅ Loaded classroom links for ${Object.keys(classroomLinks).length} entries`);
 
     // Merge links (classroom links take priority)
     const mergedLinks = { ...teacherLinks };
+    console.log('🔀 Merging links...');
+    
+    let mergedCount = 0;
+    let addedCount = 0;
+    
     for (const [key, links] of Object.entries(classroomLinks)) {
       if (!mergedLinks[key]) {
         mergedLinks[key] = {};
+        addedCount++;
+        console.log(`  ➕ Adding new entry: "${key}"`);
+      } else {
+        mergedCount++;
+        console.log(`  🔄 Updating entry: "${key}"`);
       }
-      if (links.meet) mergedLinks[key].meet = links.meet;
-      if (links.zoom) mergedLinks[key].zoom = links.zoom;
-      if (links.classroom) mergedLinks[key].classroom = links.classroom;
+      
+      if (links.meet) {
+        mergedLinks[key].meet = links.meet;
+        console.log(`     ✅ Meet: ${links.meet.substring(0, 50)}...`);
+      }
+      if (links.zoom) {
+        mergedLinks[key].zoom = links.zoom;
+        console.log(`     ✅ Zoom: ${links.zoom.substring(0, 50)}...`);
+      }
+      if (links.classroom) {
+        mergedLinks[key].classroom = links.classroom;
+        console.log(`     ✅ Classroom: ${links.classroom.substring(0, 50)}...`);
+      }
     }
 
-    console.log(`📊 Total merged links: ${Object.keys(mergedLinks).length}`);
+    console.log(`📊 Merge summary:`);
+    console.log(`   - Total merged links: ${Object.keys(mergedLinks).length}`);
+    console.log(`   - Updated existing: ${mergedCount}`);
+    console.log(`   - Added new: ${addedCount}`);
+    console.log(`📝 Final merged keys:`, Object.keys(mergedLinks).join(', '));
 
     // Calculate end column (groupCell + 2 columns for type and location)
     // Example: if groupCell is 'AK', we need 'AK:AM' (AK, AL, AM)
@@ -199,15 +293,29 @@ export async function POST(request: NextRequest) {
           description += `\nВикладач: ${event.teacherName}`;
         }
         
+        console.log(`\n📅 Creating event: ${event.subject}`);
+        console.log(`   Teacher: ${event.teacherName || 'N/A'}`);
+        console.log(`   Location: ${event.location || 'N/A'}`);
+        console.log(`   Meeting Link: ${event.meetingLink || 'N/A'}`);
+        console.log(`   Classroom Link: ${event.classroomLink || 'N/A'}`);
+        
         // Add meeting link (Zoom/Meet)
         if (event.meetingLink) {
           description += `\n\n🔗 Посилання на заняття:\n${event.meetingLink}`;
+          console.log(`   ✅ Added meeting link to description`);
+        } else {
+          console.log(`   ⚠️  No meeting link to add`);
         }
         
         // Add classroom link if available
         if (event.classroomLink) {
           description += `\n\n📚 Google Classroom:\n${event.classroomLink}`;
+          console.log(`   ✅ Added classroom link to description`);
+        } else {
+          console.log(`   ⚠️  No classroom link to add`);
         }
+        
+        console.log(`   📝 Final description:\n${description.split('\n').map(line => `      ${line}`).join('\n')}`);
 
         // Format datetime for Kyiv timezone without converting to UTC
         const formatKyivDateTime = (date: Date) => {

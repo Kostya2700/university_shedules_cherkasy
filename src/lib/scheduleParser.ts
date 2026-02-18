@@ -1,5 +1,15 @@
 import type { ScheduleEvent, TeacherLinks } from '@/types/schedule';
 
+// Normalize teacher name for matching
+function normalizeTeacherName(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/['"«»]/g, '')
+    .replace(/проф\.|доц\.|викл\.|ст\.викл\.|к\.т\.н\.,?\s*/gi, '');
+}
+
 export function extractTeacherName(subject: string): string | null {
   if (!subject) return null;
 
@@ -99,17 +109,43 @@ export function parseSchedule(
     let classroomLink: string | undefined = undefined;
 
     if (teacherName && teacherLinks) {
-      const teacher = teacherLinks[teacherName];
+      // Try to find links with exact name match first
+      let teacher = teacherLinks[teacherName];
+      
+      // If not found, try normalized name
+      if (!teacher) {
+        const normalizedName = normalizeTeacherName(teacherName);
+        teacher = teacherLinks[normalizedName];
+        console.log(`  👤 ${teacherName} (normalized: ${normalizedName}):`);
+      } else {
+        console.log(`  👤 ${teacherName}:`);
+      }
+      
       if (teacher) {
         // Get meeting link based on location (Zoom or Meet)
         if (location) {
           const platform = location.toLowerCase().trim();
-          if (platform === 'zoom' || platform === 'meet') {
-            meetingLink = teacher[platform as 'zoom' | 'meet'];
+          if (platform === 'zoom' && teacher.zoom) {
+            meetingLink = teacher.zoom;
+            console.log(`     ✅ Zoom: ${meetingLink}`);
+          } else if (platform === 'meet' && teacher.meet) {
+            meetingLink = teacher.meet;
+            console.log(`     ✅ Meet: ${meetingLink}`);
+          } else if (platform === 'zoom' || platform === 'meet') {
+            console.log(`     ⚠️  ${platform}: not found`);
           }
         }
         // Always try to get classroom link (independent of location)
-        classroomLink = teacher.classroom;
+        if (teacher.classroom) {
+          classroomLink = teacher.classroom;
+          console.log(`     ✅ Classroom: ${classroomLink}`);
+        } else {
+          console.log(`     ⚠️  Classroom: not found`);
+        }
+      } else {
+        console.log(`  ⚠️  No links found for teacher: ${teacherName}`);
+        // Log all available keys for debugging
+        console.log(`  📝 Available keys:`, Object.keys(teacherLinks).join(', '));
       }
     }
 
