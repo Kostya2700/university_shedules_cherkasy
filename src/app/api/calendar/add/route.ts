@@ -17,6 +17,51 @@ async function fetchTeacherLinks() {
   }
 }
 
+// Fetch links from Google Classroom/Meet spreadsheet
+async function fetchClassroomLinks(oauth2Client: any) {
+  try {
+    const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
+    const classroomSpreadsheetId = '1rJLdJ2fF0WETg7jOs_BBitC-cZIS2n0iEv-ZpbPkc5Y';
+    
+    console.log('📥 Fetching classroom/meet/zoom links from Google Sheets...');
+    
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: classroomSpreadsheetId,
+      range: 'A2:Z1000', // Read all data starting from row 2 (skip header)
+    });
+
+    const rows = response.data.values || [];
+    const linksMap: Record<string, { meet?: string; zoom?: string; classroom?: string }> = {};
+
+    // Parse rows and build links map by teacher/subject
+    for (const row of rows) {
+      if (row.length < 2) continue;
+      
+      const key = row[0]?.trim(); // Teacher name or subject
+      if (!key) continue;
+
+      // Extract links from columns (adjust indices based on actual table structure)
+      const links: { meet?: string; zoom?: string; classroom?: string } = {};
+      
+      if (row[1]?.trim()) links.meet = row[1].trim();
+      if (row[2]?.trim()) links.zoom = row[2].trim();
+      if (row[3]?.trim()) links.classroom = row[3].trim();
+
+      // Only add if at least one link exists
+      if (links.meet || links.zoom || links.classroom) {
+        linksMap[key] = links;
+        console.log(`  📌 ${key}: Meet=${!!links.meet}, Zoom=${!!links.zoom}, Classroom=${!!links.classroom}`);
+      }
+    }
+
+    console.log(`✅ Loaded classroom links for ${Object.keys(linksMap).length} entries`);
+    return linksMap;
+  } catch (error) {
+    console.warn('❌ Error fetching classroom links:', error);
+    return {};
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const tokens = request.cookies.get('google_tokens')?.value;
@@ -67,7 +112,7 @@ export async function POST(request: NextRequest) {
     console.log(`Sheet name: ${sheetName}`);
     console.log(`Group cell: ${groupCell}`);
 
-    // Fetch teacher links
+    // Fetch teacher links from external API
     console.log('📥 Fetching teacher links...');
     const teacherLinks = await fetchTeacherLinks();
     if (teacherLinks) {
@@ -75,6 +120,22 @@ export async function POST(request: NextRequest) {
     } else {
       console.log('⚠️  No teacher links available');
     }
+
+    // Fetch classroom/meet links from Google Sheets
+    const classroomLinks = await fetchClassroomLinks(oauth2Client);
+
+    // Merge links (classroom links take priority)
+    const mergedLinks = { ...teacherLinks };
+    for (const [key, links] of Object.entries(classroomLinks)) {
+      if (!mergedLinks[key]) {
+        mergedLinks[key] = {};
+      }
+      if (links.meet) mergedLinks[key].meet = links.meet;
+      if (links.zoom) mergedLinks[key].zoom = links.zoom;
+      if (links.classroom) mergedLinks[key].classroom = links.classroom;
+    }
+
+    console.log(`📊 Total merged links: ${Object.keys(mergedLinks).length}`);
 
     // Calculate end column (groupCell + 2 columns for type and location)
     // Example: if groupCell is 'AK', we need 'AK:AM' (AK, AL, AM)
@@ -106,11 +167,11 @@ export async function POST(request: NextRequest) {
       console.log('First schedule row:', valueRanges[0].values[0]);
     }
     
-    // Parse events
+    // Parse events with merged links
     const events = parseSchedule(
       valueRanges.map(vr => ({ values: vr.values as string[][] })),
       groupCell,
-      teacherLinks
+      mergedLinks
     );
 
     console.log(`Parsed ${events.length} events`);
@@ -138,8 +199,14 @@ export async function POST(request: NextRequest) {
           description += `\nВикладач: ${event.teacherName}`;
         }
         
+        // Add meeting link (Zoom/Meet)
         if (event.meetingLink) {
           description += `\n\n🔗 Посилання на заняття:\n${event.meetingLink}`;
+        }
+        
+        // Add classroom link if available
+        if (event.classroomLink) {
+          description += `\n\n📚 Google Classroom:\n${event.classroomLink}`;
         }
 
         // Format datetime for Kyiv timezone without converting to UTC

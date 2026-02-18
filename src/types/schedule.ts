@@ -7,6 +7,7 @@ export interface ScheduleEvent {
   dayOfWeek: string;
   teacherName?: string;
   meetingLink?: string;
+  classroomLink?: string;
 }
 
 export interface Sheet {
@@ -18,6 +19,7 @@ export interface TeacherLinks {
   [teacherName: string]: {
     zoom?: string;
     meet?: string;
+    classroom?: string;
   };
 }
 

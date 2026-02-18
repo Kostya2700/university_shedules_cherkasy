@@ -93,17 +93,23 @@ export function parseSchedule(
     const startDateTime = new Date(`${dateStr}T${startTimeStr}`);
     const endDateTime = new Date(`${dateStr}T${endTimeStr}`);
 
-    // Extract teacher name and get meeting link
+    // Extract teacher name and get meeting links
     const teacherName = extractTeacherName(subject);
     let meetingLink: string | undefined = undefined;
+    let classroomLink: string | undefined = undefined;
 
-    if (teacherName && teacherLinks && location) {
-      const platform = location.toLowerCase().trim();
-      if (platform === 'zoom' || platform === 'meet') {
-        const teacher = teacherLinks[teacherName];
-        if (teacher) {
-          meetingLink = teacher[platform as 'zoom' | 'meet'];
+    if (teacherName && teacherLinks) {
+      const teacher = teacherLinks[teacherName];
+      if (teacher) {
+        // Get meeting link based on location (Zoom or Meet)
+        if (location) {
+          const platform = location.toLowerCase().trim();
+          if (platform === 'zoom' || platform === 'meet') {
+            meetingLink = teacher[platform as 'zoom' | 'meet'];
+          }
         }
+        // Always try to get classroom link (independent of location)
+        classroomLink = teacher.classroom;
       }
     }
 
@@ -116,6 +122,7 @@ export function parseSchedule(
       dayOfWeek: currentDayOfWeek || '',
       teacherName: teacherName || undefined,
       meetingLink,
+      classroomLink,
     });
   }
 
