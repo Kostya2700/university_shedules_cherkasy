@@ -108,20 +108,59 @@ export function parseSchedule(
     let meetingLink: string | undefined = undefined;
     let classroomLink: string | undefined = undefined;
 
-    if (teacherName && teacherLinks) {
-      // Try to find links with exact name match first
-      let teacher = teacherLinks[teacherName];
+    if (teacherLinks) {
+      console.log(`\n🔍 Searching links for event: "${subject}"`);
+      console.log(`   Teacher extracted: ${teacherName || 'N/A'}`);
+      console.log(`   Location: ${location || 'N/A'}`);
       
-      // If not found, try normalized name
-      if (!teacher) {
+      let teacher = null;
+      let matchType = '';
+      
+      // Strategy 1: Try exact teacher name match
+      if (teacherName && teacherLinks[teacherName]) {
+        teacher = teacherLinks[teacherName];
+        matchType = 'exact teacher name';
+      }
+      
+      // Strategy 2: Try normalized teacher name
+      if (!teacher && teacherName) {
         const normalizedName = normalizeTeacherName(teacherName);
-        teacher = teacherLinks[normalizedName];
-        console.log(`  👤 ${teacherName} (normalized: ${normalizedName}):`);
-      } else {
-        console.log(`  👤 ${teacherName}:`);
+        if (teacherLinks[normalizedName]) {
+          teacher = teacherLinks[normalizedName];
+          matchType = `normalized teacher name (${normalizedName})`;
+        }
+      }
+      
+      // Strategy 3: Try full subject as key
+      if (!teacher && teacherLinks[subject]) {
+        teacher = teacherLinks[subject];
+        matchType = 'full subject';
+      }
+      
+      // Strategy 4: Try normalized subject
+      if (!teacher) {
+        const normalizedSubject = normalizeTeacherName(subject);
+        if (teacherLinks[normalizedSubject]) {
+          teacher = teacherLinks[normalizedSubject];
+          matchType = `normalized subject (${normalizedSubject})`;
+        }
+      }
+      
+      // Strategy 5: Try partial match (search in keys)
+      if (!teacher && teacherName) {
+        const lowerTeacher = teacherName.toLowerCase();
+        for (const [key, value] of Object.entries(teacherLinks)) {
+          if (key.toLowerCase().includes(lowerTeacher) || lowerTeacher.includes(key.toLowerCase())) {
+            teacher = value;
+            matchType = `partial match (${key})`;
+            break;
+          }
+        }
       }
       
       if (teacher) {
+        console.log(`   ✅ Found match: ${matchType}`);
+        
         // Get meeting link based on location (Zoom or Meet)
         if (location) {
           const platform = location.toLowerCase().trim();
@@ -135,6 +174,7 @@ export function parseSchedule(
             console.log(`     ⚠️  ${platform}: not found`);
           }
         }
+        
         // Always try to get classroom link (independent of location)
         if (teacher.classroom) {
           classroomLink = teacher.classroom;
@@ -143,13 +183,12 @@ export function parseSchedule(
           console.log(`     ⚠️  Classroom: not found`);
         }
       } else {
-        console.log(`  ⚠️  No links found for teacher: ${teacherName}`);
-        // Log all available keys for debugging
-        console.log(`  📝 Available keys:`, Object.keys(teacherLinks).join(', '));
+        console.log(`   ❌ No links found`);
+        console.log(`   📝 Available ${Object.keys(teacherLinks).length} keys:`, Object.keys(teacherLinks).slice(0, 10).join(', '));
       }
     }
 
-    events.push({
+    const parsedEvent: ScheduleEvent = {
       subject: subject.trim(),
       type: type?.trim() || '',
       location: location?.trim() || '',
@@ -159,7 +198,16 @@ export function parseSchedule(
       teacherName: teacherName || undefined,
       meetingLink,
       classroomLink,
+    };
+    
+    console.log(`   📅 Event created:`, {
+      subject: parsedEvent.subject,
+      teacher: parsedEvent.teacherName || 'N/A',
+      meetingLink: parsedEvent.meetingLink ? 'YES' : 'NO',
+      classroomLink: parsedEvent.classroomLink ? 'YES' : 'NO',
     });
+    
+    events.push(parsedEvent);
   }
 
   return events;
