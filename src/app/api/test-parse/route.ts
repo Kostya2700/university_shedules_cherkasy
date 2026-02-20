@@ -21,14 +21,14 @@ export async function POST(request: NextRequest) {
     const { sheetId, groupCell } = await request.json();
     
     if (!sheetId || !groupCell) {
-      return NextResponse.json({ error: 'Missing sheetId or groupCell' }, { status: 400 });
+      return NextResponse.json({ error: 'Missing sheetId ors  groupCell' }, { status: 400 });
     }
 
     const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
     const spreadsheetId = process.env.SPREADSHEET_ID;
 
     if (!spreadsheetId) {
-      return NextResponse.json({ error: 'SPREADSHEET_ID not configured' }, { status: 500 });
+      return NextResponse.json({ error: 'SPREADSHEET_ID not configured please fix it' }, { status: 500 });
     }
 
     const sheetMetadata = await sheets.spreadsheets.get({
