@@ -1,7 +1,7 @@
 import { google } from 'googleapis';
 import { NextRequest, NextResponse } from 'next/server';
 
-// Returns the range covering previous week (Mon) to current week (Sun)
+// Returns the range: Monday of previous week → Sunday of current week
 function getTwoWeeksRange(): { start: Date; end: Date } {
   const now = new Date();
   const dayOfWeek = now.getDay();
@@ -18,51 +18,26 @@ function getTwoWeeksRange(): { start: Date; end: Date } {
   return { start: prevMonday, end: currentSunday };
 }
 
-// Try to parse a date range from a sheet title.
-// Supports formats like:
-//   "10.03-16.03.2026"  → 10 Mar – 16 Mar 2026
-//   "10.03.2026-16.03.2026"
-//   "10-16.03.2026"
-function parseDateRangeFromTitle(title: string): { start: Date; end: Date } | null {
-  // Pattern: DD.MM-DD.MM.YYYY  (e.g. 10.03-16.03.2026)
-  let m = title.match(/(\d{1,2})\.(\d{2})-(\d{1,2})\.(\d{2})\.(\d{4})/);
-  if (m) {
-    const [, d1, mo1, d2, mo2, y] = m;
-    const start = new Date(parseInt(y), parseInt(mo1) - 1, parseInt(d1), 0, 0, 0);
-    const end   = new Date(parseInt(y), parseInt(mo2) - 1, parseInt(d2), 23, 59, 59);
-    return { start, end };
-  }
-
-  // Pattern: DD.MM.YYYY-DD.MM.YYYY
-  m = title.match(/(\d{1,2})\.(\d{2})\.(\d{4})-(\d{1,2})\.(\d{2})\.(\d{4})/);
-  if (m) {
-    const [, d1, mo1, y1, d2, mo2, y2] = m;
-    const start = new Date(parseInt(y1), parseInt(mo1) - 1, parseInt(d1), 0, 0, 0);
-    const end   = new Date(parseInt(y2), parseInt(mo2) - 1, parseInt(d2), 23, 59, 59);
-    return { start, end };
-  }
-
-  // Pattern: DD-DD.MM.YYYY  (e.g. 10-16.03.2026)
-  m = title.match(/(\d{1,2})-(\d{1,2})\.(\d{2})\.(\d{4})/);
-  if (m) {
-    const [, d1, d2, mo, y] = m;
-    const start = new Date(parseInt(y), parseInt(mo) - 1, parseInt(d1), 0, 0, 0);
-    const end   = new Date(parseInt(y), parseInt(mo) - 1, parseInt(d2), 23, 59, 59);
-    return { start, end };
-  }
-
-  return null;
+// Format: "3 курс ФБК 16.03.2026" — single date = Monday of that week
+// We treat the sheet as covering [date .. date+6 days]
+function parseSheetWeekFromTitle(title: string): { start: Date; end: Date } | null {
+  const m = title.match(/(\d{1,2})\.(\d{2})\.(\d{4})/);
+  if (!m) return null;
+  const [, d, mo, y] = m;
+  const start = new Date(parseInt(y), parseInt(mo) - 1, parseInt(d), 0, 0, 0);
+  const end = new Date(parseInt(y), parseInt(mo) - 1, parseInt(d), 23, 59, 59);
+  end.setDate(end.getDate() + 6); // full week Mon–Sun
+  return { start, end };
 }
 
-// Returns true if [sheetStart, sheetEnd] overlaps with [rangeStart, rangeEnd]
-function overlaps(sheetStart: Date, sheetEnd: Date, rangeStart: Date, rangeEnd: Date): boolean {
-  return sheetStart <= rangeEnd && sheetEnd >= rangeStart;
+function overlaps(s1: Date, e1: Date, s2: Date, e2: Date): boolean {
+  return s1 <= e2 && e1 >= s2;
 }
 
 export async function GET(request: NextRequest) {
   try {
     const tokens = request.cookies.get('google_tokens')?.value;
-    
+
     if (!tokens) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
@@ -82,13 +57,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'SPREADSHEET_ID not configured' }, { status: 500 });
     }
 
-    // Get filter parameters from query string
     const url = new URL(request.url);
     const level = url.searchParams.get('level');
     const course = url.searchParams.get('course');
     const currentYear = new Date().getFullYear();
 
-    // Two-week window for filtering sheets by date
     const twoWeeks = getTwoWeeksRange();
 
     const response = await sheets.spreadsheets.get({ spreadsheetId });
@@ -97,30 +70,29 @@ export async function GET(request: NextRequest) {
       ?.filter(sheet => {
         const title = sheet.properties?.title || '';
 
-        // Always filter by current year
+        // Filter by current year
         if (!title.includes(currentYear.toString())) {
           return false;
         }
 
-        // Apply level filter
+        // Filter by level (бакалавр / магістр)
         if (level && !title.toLowerCase().includes(level.toLowerCase())) {
           return false;
         }
 
-        // Apply course filter
+        // Filter by course ("3 курс")
         if (course && !title.includes(`${course} курс`)) {
           return false;
         }
 
-        // Filter by date range: keep only sheets whose dates overlap
-        // with the previous + current week window
-        const dateRange = parseDateRangeFromTitle(title);
-        if (dateRange) {
-          return overlaps(dateRange.start, dateRange.end, twoWeeks.start, twoWeeks.end);
+        // Filter by week: only sheets whose week overlaps with prev+current week
+        const sheetWeek = parseSheetWeekFromTitle(title);
+        if (!sheetWeek) {
+          // No date in title — hide it
+          return false;
         }
 
-        // If no date found in title — keep the sheet (don't hide it)
-        return true;
+        return overlaps(sheetWeek.start, sheetWeek.end, twoWeeks.start, twoWeeks.end);
       })
       .map(sheet => ({
         id: sheet.properties?.sheetId,
