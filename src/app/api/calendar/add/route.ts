@@ -145,11 +145,17 @@ export async function POST(request: NextRequest) {
 
     oauth2Client.setCredentials(JSON.parse(tokens));
 
-    const { sheetId, groupCell } = await request.json();
+    const { sheetId, groupCell, weekStart, weekEnd } = await request.json();
     
     if (!sheetId || !groupCell) {
       return NextResponse.json({ error: 'Missing sheetId or groupCell' }, { status: 400 });
     }
+
+    // Parse week filter dates (if provided)
+    const filterStart = weekStart ? new Date(weekStart) : null;
+    const filterEnd = weekEnd ? new Date(weekEnd) : null;
+
+    console.log(`📅 Week filter: ${filterStart?.toLocaleDateString() ?? 'none'} — ${filterEnd?.toLocaleDateString() ?? 'none'}`);
 
     // Fetch data from Google Sheets
     const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
@@ -262,13 +268,23 @@ export async function POST(request: NextRequest) {
     }
     
     // Parse events with merged links
-    const events = parseSchedule(
+    const allEvents = parseSchedule(
       valueRanges.map(vr => ({ values: vr.values as string[][] })),
       groupCell,
       mergedLinks
     );
 
-    console.log(`Parsed ${events.length} events`);
+    console.log(`Parsed ${allEvents.length} events total`);
+
+    // Filter events by selected week range
+    const events = filterStart && filterEnd
+      ? allEvents.filter(event => {
+          const eventDate = event.startDateTime;
+          return eventDate >= filterStart && eventDate <= filterEnd;
+        })
+      : allEvents;
+
+    console.log(`After week filter: ${events.length} events (${filterStart ? `${filterStart.toLocaleDateString()} — ${filterEnd?.toLocaleDateString()}` : 'no filter'})`);
 
     if (events.length === 0) {
       return NextResponse.json({ 

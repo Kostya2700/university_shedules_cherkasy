@@ -17,6 +17,45 @@ interface CalendarResult {
   errors: Array<{ event: string; error: string }>;
 }
 
+type WeekType = 'current' | 'previous';
+
+function getWeekRange(weekType: WeekType): { start: Date; end: Date; label: string } {
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon ... 6=Sat
+  // Start of current week (Monday)
+  const diffToMonday = (dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
+  const currentMonday = new Date(now);
+  currentMonday.setHours(0, 0, 0, 0);
+  currentMonday.setDate(now.getDate() + diffToMonday);
+
+  const currentSunday = new Date(currentMonday);
+  currentSunday.setDate(currentMonday.getDate() + 6);
+  currentSunday.setHours(23, 59, 59, 999);
+
+  if (weekType === 'current') {
+    return {
+      start: currentMonday,
+      end: currentSunday,
+      label: `Поточний тиждень (${formatDate(currentMonday)} – ${formatDate(currentSunday)})`,
+    };
+  } else {
+    const prevMonday = new Date(currentMonday);
+    prevMonday.setDate(currentMonday.getDate() - 7);
+    const prevSunday = new Date(currentMonday);
+    prevSunday.setDate(currentMonday.getDate() - 1);
+    prevSunday.setHours(23, 59, 59, 999);
+    return {
+      start: prevMonday,
+      end: prevSunday,
+      label: `Минулий тиждень (${formatDate(prevMonday)} – ${formatDate(prevSunday)})`,
+    };
+  }
+}
+
+function formatDate(date: Date): string {
+  return date.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' });
+}
+
 export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -33,6 +72,9 @@ export default function Home() {
   const [level, setLevel] = useState<string>('бакалавр');
   const [course, setCourse] = useState<string>('3');
   const [loadingSheets, setLoadingSheets] = useState(false);
+
+  // Week selection
+  const [selectedWeek, setSelectedWeek] = useState<WeekType>('current');
 
   useEffect(() => {
     checkAuth();
@@ -121,7 +163,7 @@ export default function Home() {
     }
 
     setProcessing(true);
-    setMessage('🗑️ Видалення старих подій...');
+    setMessage('🗑️ Видалення подій за обидва тижні...');
     setResult(null);
 
     try {
@@ -130,7 +172,8 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           sheetId: parseInt(selectedSheet),
-          groupCell: selectedGroup 
+          groupCell: selectedGroup,
+          deleteBothWeeks: true,
         }),
       });
 
@@ -161,6 +204,8 @@ export default function Home() {
     setMessage('➕ Додавання нових подій...');
     setResult(null);
 
+    const weekRange = getWeekRange(selectedWeek);
+
     try {
       const res = await fetch('/api/calendar/add', {
         method: 'POST',
@@ -168,6 +213,8 @@ export default function Home() {
         body: JSON.stringify({
           sheetId: parseInt(selectedSheet),
           groupCell: selectedGroup,
+          weekStart: weekRange.start.toISOString(),
+          weekEnd: weekRange.end.toISOString(),
         }),
       });
 
@@ -199,15 +246,18 @@ export default function Home() {
     setMessage('🔄 Оновлення розкладу...');
     setResult(null);
 
+    const weekRange = getWeekRange(selectedWeek);
+
     try {
-      // Step 1: Delete old events
-      setMessage('🗑️ Видалення старих подій...');
+      // Step 1: Delete events for BOTH weeks (previous + current)
+      setMessage('🗑️ Видалення подій за минулий та поточний тижні...');
       const deleteRes = await fetch('/api/calendar/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           sheetId: parseInt(selectedSheet),
-          groupCell: selectedGroup 
+          groupCell: selectedGroup,
+          deleteBothWeeks: true,
         }),
       });
 
@@ -219,14 +269,16 @@ export default function Home() {
         return;
       }
 
-      // Step 2: Add new events
-      setMessage(`✅ Видалено ${deleteData.deleted} подій. ➕ Додавання нових...`);
+      // Step 2: Add events only for selected week
+      setMessage(`✅ Видалено ${deleteData.deleted} подій. ➕ Додавання подій за обраний тиждень...`);
       const addRes = await fetch('/api/calendar/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sheetId: parseInt(selectedSheet),
           groupCell: selectedGroup,
+          weekStart: weekRange.start.toISOString(),
+          weekEnd: weekRange.end.toISOString(),
         }),
       });
 
@@ -346,6 +398,23 @@ export default function Home() {
                   </select>
                 </div>
               </div>
+            </div>
+
+            {/* Week Selection */}
+            <div className="bg-amber-50 p-4 rounded-lg border-2 border-amber-200">
+              <h3 className="text-sm font-bold text-gray-700 mb-3">📅 Оберіть тиждень для додавання</h3>
+              <select
+                value={selectedWeek}
+                onChange={(e) => setSelectedWeek(e.target.value as WeekType)}
+                className="w-full px-4 py-2 bg-white text-gray-900 font-medium border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition shadow-sm hover:border-gray-400 cursor-pointer"
+                disabled={processing}
+              >
+                <option value="current">{getWeekRange('current').label}</option>
+                <option value="previous">{getWeekRange('previous').label}</option>
+              </select>
+              <p className="mt-2 text-xs text-amber-700">
+                ⚠️ При оновленні — події за <strong>обидва тижні</strong> видаляються, додаються лише події за обраний тиждень.
+              </p>
             </div>
 
             {/* Sheet Selection */}
