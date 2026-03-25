@@ -17,7 +17,7 @@ interface CalendarResult {
   errors: Array<{ event: string; error: string }>;
 }
 
-function getTwoWeeksRange(): { start: Date; end: Date } {
+function getThreeWeeksRange(): { start: Date; end: Date } {
   const now = new Date();
   const dayOfWeek = now.getDay();
   const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -27,12 +27,12 @@ function getTwoWeeksRange(): { start: Date; end: Date } {
   prevMonday.setHours(0, 0, 0, 0);
   prevMonday.setDate(now.getDate() + diffToMonday - 7);
 
-  // End of current week (Sunday)
-  const currentSunday = new Date(now);
-  currentSunday.setHours(23, 59, 59, 999);
-  currentSunday.setDate(now.getDate() + diffToMonday + 6);
+  // End of next week (Sunday)
+  const nextSunday = new Date(now);
+  nextSunday.setHours(23, 59, 59, 999);
+  nextSunday.setDate(now.getDate() + diffToMonday + 13);
 
-  return { start: prevMonday, end: currentSunday };
+  return { start: prevMonday, end: nextSunday };
 }
 
 export default function Home() {
@@ -180,7 +180,7 @@ export default function Home() {
     setMessage('➕ Додавання нових подій...');
     setResult(null);
 
-    const weekRange = getTwoWeeksRange();
+    const weekRange = getThreeWeeksRange();
 
     try {
       const res = await fetch('/api/calendar/add', {
@@ -222,7 +222,7 @@ export default function Home() {
     setMessage('🔄 Оновлення розкладу...');
     setResult(null);
 
-    const weekRange = getTwoWeeksRange();
+    const weekRange = getThreeWeeksRange();
 
     try {
       // Step 1: Delete events for BOTH weeks (previous + current)

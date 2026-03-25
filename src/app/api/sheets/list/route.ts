@@ -1,21 +1,23 @@
 import { google } from 'googleapis';
 import { NextRequest, NextResponse } from 'next/server';
 
-// Returns the range: Monday of previous week → Sunday of current week
-function getTwoWeeksRange(): { start: Date; end: Date } {
+// Returns the range: Monday of previous week → Sunday of next week
+function getThreeWeeksRange(): { start: Date; end: Date } {
   const now = new Date();
   const dayOfWeek = now.getDay();
   const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
 
+  // Start of previous week (Monday)
   const prevMonday = new Date(now);
   prevMonday.setHours(0, 0, 0, 0);
   prevMonday.setDate(now.getDate() + diffToMonday - 7);
 
-  const currentSunday = new Date(now);
-  currentSunday.setHours(23, 59, 59, 999);
-  currentSunday.setDate(now.getDate() + diffToMonday + 6);
+  // End of next week (Sunday)
+  const nextSunday = new Date(now);
+  nextSunday.setHours(23, 59, 59, 999);
+  nextSunday.setDate(now.getDate() + diffToMonday + 13);
 
-  return { start: prevMonday, end: currentSunday };
+  return { start: prevMonday, end: nextSunday };
 }
 
 // Format: "3 курс ФБК 16.03.2026" — single date = Monday of that week
@@ -62,7 +64,8 @@ export async function GET(request: NextRequest) {
     const course = url.searchParams.get('course');
     const currentYear = new Date().getFullYear();
 
-    const twoWeeks = getTwoWeeksRange();
+    // Заміна getTwoWeeksRange на getThreeWeeksRange
+    const threeWeeks = getThreeWeeksRange();
 
     const response = await sheets.spreadsheets.get({ spreadsheetId });
 
@@ -85,14 +88,14 @@ export async function GET(request: NextRequest) {
           return false;
         }
 
-        // Filter by week: only sheets whose week overlaps with prev+current week
+        // Filter by week: only sheets whose week overlaps with prev+current+next week
         const sheetWeek = parseSheetWeekFromTitle(title);
         if (!sheetWeek) {
           // No date in title — hide it
           return false;
         }
 
-        return overlaps(sheetWeek.start, sheetWeek.end, twoWeeks.start, twoWeeks.end);
+        return overlaps(sheetWeek.start, sheetWeek.end, threeWeeks.start, threeWeeks.end);
       })
       .map(sheet => ({
         id: sheet.properties?.sheetId,
